@@ -130,25 +130,26 @@ def get_html_for_template_preview(template_id=None):
 
 
 def generate_invoice_pdf(inv):
-    """Generate PDF from invoice using Playwright. Returns BytesIO buffer."""
+    """Generate PDF from invoice using Playwright (if available). Returns BytesIO buffer."""
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        raise RuntimeError("Playwright not installed. Run: pip install playwright && playwright install chromium")
+        raise RuntimeError("Playwright not installed")
 
-    html = get_html_for_invoice(inv)
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.set_content(html, wait_until="networkidle")
-        pdf_bytes = page.pdf(
-            format="A4",
-            print_background=True,
-            margin={"top": "20mm", "right": "20mm", "bottom": "20mm", "left": "20mm"},
-        )
-        browser.close()
-
-    buf = BytesIO(pdf_bytes)
-    buf.seek(0)
-    return buf
+    try:
+        html = get_html_for_invoice(inv)
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content(html, wait_until="networkidle")
+            pdf_bytes = page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "20mm", "right": "20mm", "bottom": "20mm", "left": "20mm"},
+            )
+            browser.close()
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
+    except Exception:
+        raise RuntimeError("Playwright/Chromium not available")
