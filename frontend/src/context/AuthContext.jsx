@@ -5,8 +5,13 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user')
-    return saved ? JSON.parse(saved) : null
+    try {
+      const saved = localStorage.getItem('user')
+      const parsed = saved ? JSON.parse(saved) : null
+      return parsed && typeof parsed === 'object' && (parsed.id || parsed.email) ? parsed : null
+    } catch {
+      return null
+    }
   })
   const [loading, setLoading] = useState(true)
 
@@ -15,8 +20,15 @@ export function AuthProvider({ children }) {
     if (token) {
       api.get('/auth/me')
         .then((res) => {
-          setUser(res.data)
-          localStorage.setItem('user', JSON.stringify(res.data))
+          const data = res.data
+          if (data && typeof data === 'object' && (data.id || data.email)) {
+            setUser(data)
+            localStorage.setItem('user', JSON.stringify(data))
+          } else {
+            localStorage.removeItem('token')
+            localStorage.removeItem('user')
+            setUser(null)
+          }
         })
         .catch(() => {
           localStorage.removeItem('token')

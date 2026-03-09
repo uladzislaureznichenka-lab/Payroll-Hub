@@ -18,7 +18,8 @@ export default function Login() {
       await login(email, password)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials')
+      const msg = err.response?.data?.error || err.response?.data?.detail || err.message
+      setError(msg || (err.code === 'ERR_NETWORK' ? 'Сервер не отвечает. Подожди 30–60 сек (сервер мог «заснуть») и попробуй снова.' : 'Invalid credentials'))
     } finally {
       setLoading(false)
     }
