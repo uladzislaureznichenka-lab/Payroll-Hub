@@ -82,9 +82,6 @@ export default function EmployeePortal() {
   }, [isAdmin])
 
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7831/ingest/60e562ca-81b6-4eb3-b1be-07f4d1f0837b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64ced1'},body:JSON.stringify({sessionId:'64ced1',location:'EmployeePortal.jsx:useEffect',message:'Portal load start',data:{employee_id,isAdmin,linkedEmployeeId:user?.employee_id,selectedEmployeeId},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (!employee_id) { setLoading(false); setEmployee(null); setLoadError(null); return }
     setLoading(true)
     setLoadError(null)
@@ -114,9 +111,6 @@ export default function EmployeePortal() {
 
     const load = () => {
       const url = isAdmin ? `/employees/${employee_id}/portal-data` : '/employees/me/portal-data'
-      // #region agent log
-      fetch('http://127.0.0.1:7831/ingest/60e562ca-81b6-4eb3-b1be-07f4d1f0837b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64ced1'},body:JSON.stringify({sessionId:'64ced1',location:'EmployeePortal.jsx:load',message:'Requesting portal-data',data:{url,fullUrl:`/api${url}`},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       return api.get(url).then((r) => {
         const d = r.data
         if (d?.employee) {
@@ -151,9 +145,6 @@ export default function EmployeePortal() {
 
     load()
       .catch((err) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7831/ingest/60e562ca-81b6-4eb3-b1be-07f4d1f0837b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64ced1'},body:JSON.stringify({sessionId:'64ced1',location:'EmployeePortal.jsx:load.catch',message:'portal-data failed',data:{status:err?.response?.status,url:err?.config?.url,errMsg:err?.message},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         if (err.response?.status === 404) {
           return loadFallback()
         }
@@ -161,9 +152,6 @@ export default function EmployeePortal() {
         setLoadError(err.response?.data?.error || err.message || 'Failed to load employee data')
       })
       .catch((fallbackErr) => {
-        // #region agent log
-        fetch('http://127.0.0.1:7831/ingest/60e562ca-81b6-4eb3-b1be-07f4d1f0837b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'64ced1'},body:JSON.stringify({sessionId:'64ced1',location:'EmployeePortal.jsx:fallback.catch',message:'fallback failed',data:{status:fallbackErr?.response?.status,url:fallbackErr?.config?.url},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         setEmployee(null)
         setLoadError(fallbackErr.response?.data?.error || fallbackErr.message || 'Failed to load employee data')
       })

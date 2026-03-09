@@ -506,15 +506,20 @@ class CompensationHistory(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
+        def _date_str(d):
+            if d is None:
+                return None
+            return d.isoformat() if hasattr(d, "isoformat") else str(d)
+
         return {
             "id": self.id,
             "employee_id": self.employee_id,
-            "effective_date": self.effective_date.isoformat() if self.effective_date else None,
-            "base_salary": self.base_salary,
-            "currency": self.currency,
+            "effective_date": _date_str(self.effective_date),
+            "base_salary": float(self.base_salary or 0),
+            "currency": self.currency or "EUR",
             "note": self.note,
             "changed_by_user_id": self.changed_by_user_id,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _date_str(self.created_at),
         }
 
 
@@ -529,6 +534,7 @@ class PayoutAuditLog(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
+        ts = self.timestamp
         return {
             "id": self.id,
             "employee_id": self.employee_id,
@@ -536,7 +542,7 @@ class PayoutAuditLog(db.Model):
             "old_value": self.old_value,
             "new_value": self.new_value,
             "changed_by": self.changed_by,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "timestamp": ts.isoformat() if ts and hasattr(ts, "isoformat") else (str(ts) if ts else None),
         }
 
 
@@ -567,9 +573,10 @@ class CustomFieldValue(db.Model):
     field = db.relationship("CustomField", backref="values")
 
     def to_dict(self):
+        f = self.field
         return {
             "id": self.id,
-            "field_name": self.field.name if self.field else "",
-            "field_type": self.field.field_type if self.field else "",
-            "value": self.value,
+            "field_name": f.name if f else "",
+            "field_type": getattr(f, "field_type", "text") if f else "text",
+            "value": self.value or "",
         }

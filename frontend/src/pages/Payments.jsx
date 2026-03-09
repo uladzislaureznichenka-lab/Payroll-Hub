@@ -24,6 +24,8 @@ export default function Payments() {
   const [editModal, setEditModal] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [savingEdit, setSavingEdit] = useState(false)
+  const [showMarkAllConfirm, setShowMarkAllConfirm] = useState(false)
+  const [markingAll, setMarkingAll] = useState(false)
 
   const now = new Date()
   const [filters, setFilters] = useState({
@@ -84,15 +86,53 @@ export default function Payments() {
     fetchPayments()
   }
 
+  const pendingCount = payments.filter((p) => p.status === 'Pending').length
+
+  const handleMarkAllPaid = async () => {
+    setMarkingAll(true)
+    try {
+      await api.post('/payments/mark-all-paid')
+      setShowMarkAllConfirm(false)
+      fetchPayments()
+    } finally {
+      setMarkingAll(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Payments</h1>
         <div className="flex items-center gap-2">
+          {pendingCount > 0 && (
+            <button
+              onClick={() => setShowMarkAllConfirm(true)}
+              className="btn-secondary"
+            >
+              Mark All as Paid
+            </button>
+          )}
           <button onClick={() => handleExport('csv')} className="btn-secondary">Export CSV</button>
           <button onClick={() => handleExport('excel')} className="btn-secondary">Export Excel</button>
         </div>
       </div>
+
+      {showMarkAllConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-slate-900 mb-2">Mark All as Paid</h2>
+            <p className="text-sm text-slate-600 mb-4">
+              Mark all {pendingCount} pending payment{pendingCount !== 1 ? 's' : ''} as Paid? Payment date will be set to today.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowMarkAllConfirm(false)} className="btn-secondary">Cancel</button>
+              <button onClick={handleMarkAllPaid} disabled={markingAll} className="btn-primary">
+                {markingAll ? 'Updating…' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card p-4">
         <div className="flex flex-wrap items-center gap-3">

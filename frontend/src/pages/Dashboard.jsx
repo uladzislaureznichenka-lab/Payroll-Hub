@@ -95,9 +95,10 @@ export default function Dashboard() {
     total: Number(d.total || 0),
   }))
 
-  const avgByDept = (data.avg_salary_by_department || []).map((d) => ({
-    department: d.department,
+  const avgByJobTitle = (data.avg_salary_by_job_title || []).map((d) => ({
+    job_title: d.job_title,
     avg: Number(d.avg_salary || 0),
+    currency: d.currency || 'EUR',
   }))
 
   const topDepartments = (data.top_departments || []).slice(0, 8).map((d) => ({
@@ -111,8 +112,8 @@ export default function Dashboard() {
     total: Number(d.total || 0),
   }))
 
-  const avgSalaryOverall = avgByDept.length
-    ? avgByDept.reduce((s, d) => s + d.avg, 0) / avgByDept.length
+  const avgSalaryOverall = avgByJobTitle.length
+    ? avgByJobTitle.reduce((s, d) => s + d.avg, 0) / avgByJobTitle.length
     : 0
 
   return (
@@ -236,14 +237,25 @@ export default function Dashboard() {
           )}
         </ChartCard>
 
-        <ChartCard title="Avg Salary by Department">
-          {avgByDept.length > 0 ? (
+        <ChartCard title="Avg Salary by Job Title">
+          {avgByJobTitle.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={avgByDept} layout="vertical">
+              <BarChart data={avgByJobTitle} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis type="number" tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={fmtNum} />
-                <YAxis type="category" dataKey="department" tick={{ fontSize: 12, fill: '#64748b' }} width={120} />
-                <Tooltip formatter={(v) => fmt(v)} />
+                <YAxis type="category" dataKey="job_title" tick={{ fontSize: 12, fill: '#64748b' }} width={140} />
+                <Tooltip content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const d = payload[0]?.payload
+                  return (
+                    <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-sm">
+                      <p className="font-medium text-slate-700 mb-1">{label}</p>
+                      <p style={{ color: payload[0]?.color }}>
+                        Avg: {fmt(payload[0]?.value)} {d?.currency || 'EUR'}
+                      </p>
+                    </div>
+                  )
+                }} />
                 <Bar dataKey="avg" name="Avg Salary" fill="#10b981" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>

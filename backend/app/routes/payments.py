@@ -39,6 +39,19 @@ def list_payments():
     return jsonify([p.to_dict() for p in payments])
 
 
+@payments_bp.route("/mark-all-paid", methods=["POST"])
+@jwt_required()
+def mark_all_paid():
+    """Batch update: set all Pending payments to Paid."""
+    pending = Payment.query.filter_by(status="Pending").all()
+    today = date.today()
+    for p in pending:
+        p.status = "Paid"
+        p.payment_date = today
+    db.session.commit()
+    return jsonify({"updated": len(pending), "payments": [p.to_dict() for p in pending]})
+
+
 @payments_bp.route("/<int:id>", methods=["GET"])
 @jwt_required()
 def get_payment(id):

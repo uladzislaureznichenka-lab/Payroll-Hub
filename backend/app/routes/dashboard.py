@@ -31,22 +31,26 @@ def get_dashboard():
     inactive_count = Employee.query.filter_by(status="Inactive").count()
     pending_payments = Payment.query.filter_by(status="Pending").count()
 
-    dept_salary = {}
+    job_salary = {}
     active_employees = Employee.query.filter_by(status="Active").all()
     for emp in active_employees:
-        dept = emp.department or "Unassigned"
-        if dept not in dept_salary:
-            dept_salary[dept] = {"total": 0, "count": 0}
-        dept_salary[dept]["total"] += emp.effective_salary or 0
-        dept_salary[dept]["count"] += 1
+        job_title = (emp.job_title or "").strip() or "Unknown"
+        if job_title not in job_salary:
+            job_salary[job_title] = {"total": 0, "count": 0, "currencies": {}}
+        job_salary[job_title]["total"] += emp.effective_salary or 0
+        job_salary[job_title]["count"] += 1
+        cur = emp.currency or "EUR"
+        job_salary[job_title]["currencies"][cur] = job_salary[job_title]["currencies"].get(cur, 0) + 1
 
-    avg_salary_by_department = [
-        {
-            "department": d,
-            "avg_salary": round(v["total"] / v["count"], 2) if v["count"] else 0,
-        }
-        for d, v in sorted(dept_salary.items())
-    ]
+    avg_salary_by_job_title = []
+    for job, v in sorted(job_salary.items()):
+        avg = round(v["total"] / v["count"], 2) if v["count"] else 0
+        currency = max(v["currencies"].items(), key=lambda x: x[1])[0] if v["currencies"] else "EUR"
+        avg_salary_by_job_title.append({
+            "job_title": job,
+            "avg_salary": avg,
+            "currency": currency,
+        })
 
     payroll_by_department = []
     payroll_by_le = []
@@ -117,7 +121,7 @@ def get_dashboard():
         "active_employees": active_count,
         "inactive_employees": inactive_count,
         "pending_payments": pending_payments,
-        "avg_salary_by_department": avg_salary_by_department,
+        "avg_salary_by_job_title": avg_salary_by_job_title,
         "payroll_by_department": payroll_by_department,
         "payroll_by_legal_entity": payroll_by_le,
         "crypto_vs_fiat": {"crypto": total_crypto, "fiat": total_fiat},

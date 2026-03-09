@@ -381,13 +381,6 @@ def get_compensation_history(id):
 def get_my_portal_data():
     """Employee portal data (for non-admin users)."""
     user = _current_user()
-    # #region agent log
-    try:
-        with open("/Users/wladek/Documents/.cursor/debug-64ced1.log", "a") as f:
-            f.write('{"sessionId":"64ced1","location":"employees.py:get_my_portal_data","message":"me/portal-data hit","data":{"employee_id":' + str(getattr(user, "employee_id", None)) + '},"hypothesisId":"H3","timestamp":' + str(int(__import__("time").time()*1000)) + '}\n')
-    except Exception:
-        pass
-    # #endregion
     if not user or not user.employee_id:
         return jsonify({"error": "Employee profile is not linked"}), 400
     return _portal_data_for_employee(user.employee_id)
@@ -398,20 +391,26 @@ def get_my_portal_data():
 def get_employee_portal_data(id):
     """Employee portal data (for admin viewing any employee)."""
     user = _current_user()
-    # #region agent log
-    with open("/Users/wladek/Documents/.cursor/debug-64ced1.log", "a") as f:
-        f.write('{"sessionId":"64ced1","location":"employees.py:get_employee_portal_data","message":"id/portal-data hit","data":{"id":' + str(id) + '},"hypothesisId":"H3","timestamp":' + str(int(__import__("time").time()*1000)) + '}\n')
-    # #endregion
     if not _ensure_employee_access(user, id):
         return jsonify({"error": "Forbidden"}), 403
     return _portal_data_for_employee(id)
+
+
+def _safe_to_dict(obj, default=None):
+    """Safely call to_dict, return default on error."""
+    if obj is None:
+        return default
+    try:
+        return obj.to_dict()
+    except Exception:
+        return default
 
 
 def _portal_data_for_employee(employee_id):
     """Return all portal data for an employee in one response."""
     emp = Employee.query.get_or_404(employee_id)
     emp_data = emp.to_dict()
-    emp_data["custom_fields"] = [cfv.to_dict() for cfv in emp.custom_field_values]
+    emp_data["custom_fields"] = [_safe_to_dict(cfv, {}) for cfv in (emp.custom_field_values or [])]
 
     payments = Payment.query.filter_by(employee_id=employee_id).order_by(Payment.created_at.desc()).all()
     invoices = Invoice.query.filter_by(employee_id=employee_id).order_by(Invoice.created_at.desc()).all()
