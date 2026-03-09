@@ -31,9 +31,12 @@ def _ensure_schema_updates():
             ("base_salary", "FLOAT"),
             ("bonus", "FLOAT"),
             ("tax_reimbursement", "FLOAT"),
+            ("pdf_path", "VARCHAR(500)"),
         ],
         "invoice_templates": [
             ("template_pdf_path", "VARCHAR(500)"),
+            ("html_content", "TEXT"),
+            ("is_active", "INTEGER DEFAULT 0"),
         ],
         "payroll_lines": [
             ("tax_reimbursement_type", "VARCHAR(20)"),

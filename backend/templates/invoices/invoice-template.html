@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice {{invoice_number}}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      padding: 40px;
+      color: #1e293b;
+      font-size: 12px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      border-bottom: 2px solid #4f46e5;
+      padding-bottom: 20px;
+    }
+    .header-left h1 {
+      font-size: 28px;
+      font-weight: bold;
+      color: #4f46e5;
+      margin: 0 0 8px 0;
+    }
+    .header-right {
+      text-align: right;
+    }
+    .meta-row { margin: 4px 0; }
+    .meta-label { font-weight: bold; color: #64748b; }
+    .section {
+      margin-bottom: 24px;
+    }
+    .section h3 {
+      font-size: 14px;
+      color: #475569;
+      margin: 0 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .section p { margin: 2px 0; }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .table th,
+    .table td {
+      border: 1px solid #e2e8f0;
+      padding: 10px 12px;
+      text-align: left;
+    }
+    .table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #475569;
+    }
+    .table td { background: #fff; }
+    .table .text-right { text-align: right; }
+    .total-row {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 2px solid #e2e8f0;
+      font-size: 16px;
+      font-weight: bold;
+      color: #1e293b;
+    }
+    .payment-instructions {
+      margin-top: 32px;
+      padding: 16px;
+      background: #f8fafc;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #64748b;
+    }
+    .payment-instructions h4 { margin: 0 0 8px 0; color: #475569; }
+    .company-from {
+      font-size: 11px;
+      color: #64748b;
+      white-space: pre-line;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>{{header}}</h1>
+      <p class="company-from">{{company_details}}</p>
+    </div>
+    <div class="header-right">
+      <p class="meta-row"><span class="meta-label">Invoice #:</span> {{invoice_number}}</p>
+      <p class="meta-row"><span class="meta-label">Date:</span> {{date}}</p>
+      <p class="meta-row"><span class="meta-label">Due Date:</span> {{due_date}}</p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Bill To</h3>
+    <p><strong>{{client_name}}</strong></p>
+    <p>{{client_address}}</p>
+  </div>
+
+  <div class="section">
+    <h3>Details</h3>
+    <p><strong>Employee:</strong> {{employee_name}}</p>
+    <p><strong>Period:</strong> {{period}}</p>
+  </div>
+
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="text-right">Unit Cost</th>
+        <th class="text-right">QTY</th>
+        <th class="text-right">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{line_items}}
+    </tbody>
+  </table>
+
+  <div class="total-row">
+    Total: {{total_amount}} {{currency}}
+  </div>
+
+  {{payment_instructions_block}}
+</body>
+</html>

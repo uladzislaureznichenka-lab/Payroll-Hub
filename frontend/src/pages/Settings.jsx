@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import api from '../api'
 
-const TABS = ['General', 'Departments', 'Legal Entities', 'Users', 'Custom Fields']
+const TABS = ['General', 'Departments', 'Legal Entities', 'Users', 'Custom Fields', 'Invoice Templates']
 
 function Spinner() {
   return (
@@ -665,6 +665,184 @@ function CustomFieldsTab() {
   )
 }
 
+function InvoiceTemplatesTab() {
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState(null)
+  const [form, setForm] = useState({ name: '', header: '', company_name: '', company_details: '', payment_instructions: '', html_content: '' })
+  const [saving, setSaving] = useState(false)
+  const [defaultHtml, setDefaultHtml] = useState('')
+
+  const fetchTemplates = useCallback(() => {
+    setLoading(true)
+    Promise.all([
+      api.get('/invoices/templates'),
+      api.get('/invoices/templates/default-html').then((r) => r.data.html).catch(() => ''),
+    ])
+      .then(([tRes, html]) => {
+        setTemplates(tRes.data)
+        setDefaultHtml(html || '')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { fetchTemplates() }, [fetchTemplates])
+
+  const openAdd = () => {
+    setForm({
+      name: 'New Template',
+      header: 'Invoice',
+      company_name: '',
+      company_details: '',
+      payment_instructions: '',
+      html_content: defaultHtml,
+    })
+    setModal('add')
+  }
+
+  const openEdit = (t) => {
+    setForm({
+      name: t.name,
+      header: t.header || '',
+      company_name: t.company_name || '',
+      company_details: t.company_details || '',
+      payment_instructions: t.payment_instructions || '',
+      html_content: t.html_content || defaultHtml,
+    })
+    setModal(t.id)
+  }
+
+  const save = async () => {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      if (modal === 'add') {
+        await api.post('/invoices/templates', form)
+      } else {
+        await api.put(`/invoices/templates/${modal}`, form)
+      }
+      setModal(null)
+      fetchTemplates()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const setActive = async (id) => {
+    await api.post(`/invoices/templates/${id}/set-active`)
+    fetchTemplates()
+  }
+
+  const remove = async (id) => {
+    if (!confirm('Delete this template?')) return
+    try {
+      await api.delete(`/invoices/templates/${id}`)
+      fetchTemplates()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to delete')
+    }
+  }
+
+  if (loading) return <Spinner />
+
+  return (
+    <>
+      <SectionCard
+        title="Invoice Templates"
+        action={<button onClick={openAdd} className="btn-primary">Add Template</button>}
+      >
+        <p className="text-sm text-slate-500 mb-4">
+          HTML templates for invoice PDF generation. Use placeholders: {'{{invoice_number}}'}, {'{{date}}'}, {'{{due_date}}'}, {'{{client_name}}'}, {'{{employee_name}}'}, {'{{period}}'}, {'{{line_items}}'}, {'{{total_amount}}'}, {'{{currency}}'}.
+        </p>
+        {templates.length === 0 ? (
+          <p className="text-sm text-slate-500">No templates yet. Add one to customize invoice design.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {templates.map((t) => (
+              <li key={t.id} className="flex items-center justify-between py-3">
+                <div>
+                  <span className="font-medium text-slate-900">{t.name}</span>
+                  {t.is_active && <span className="ml-2 badge-green">Active</span>}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={async () => {
+                      const r = await api.get(`/invoices/templates/${t.id}/preview-html`, { responseType: 'text' })
+                      const w = window.open('', '_blank')
+                      w.document.write(r.data)
+                      w.document.close()
+                    }}
+                    className="btn-secondary text-xs !px-2 !py-1"
+                  >
+                    Preview
+                  </button>
+                  {!t.is_active && (
+                    <button onClick={() => setActive(t.id)} className="btn-secondary text-xs !px-2 !py-1">
+                      Set Active
+                    </button>
+                  )}
+                  <button onClick={() => openEdit(t)} className="btn-secondary text-xs !px-2 !py-1">Edit</button>
+                  <button onClick={() => remove(t.id)} className="text-xs text-red-600 hover:text-red-800 px-2 py-1">Delete</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+
+      {modal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
+          <div className="bg-white rounded-xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold text-slate-900 mb-5">
+              {modal === 'add' ? 'Add Invoice Template' : 'Edit Invoice Template'}
+            </h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
+                  <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Header</label>
+                  <input value={form.header} onChange={(e) => setForm((f) => ({ ...f, header: e.target.value }))} className="input-field" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Company Name</label>
+                  <input value={form.company_name} onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Company Details</label>
+                  <textarea value={form.company_details} onChange={(e) => setForm((f) => ({ ...f, company_details: e.target.value }))} className="input-field" rows={2} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Payment Instructions</label>
+                <textarea value={form.payment_instructions} onChange={(e) => setForm((f) => ({ ...f, payment_instructions: e.target.value }))} className="input-field" rows={2} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">HTML Template</label>
+                <textarea
+                  value={form.html_content}
+                  onChange={(e) => setForm((f) => ({ ...f, html_content: e.target.value }))}
+                  className="input-field font-mono text-xs"
+                  rows={16}
+                  placeholder="HTML with {{placeholders}}"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setModal(null)} className="btn-secondary">Cancel</button>
+              <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 export default function Settings() {
   const [tab, setTab] = useState('General')
 
@@ -674,6 +852,7 @@ export default function Settings() {
     'Legal Entities': <LegalEntitiesTab />,
     Users: <UsersTab />,
     'Custom Fields': <CustomFieldsTab />,
+    'Invoice Templates': <InvoiceTemplatesTab />,
   }
 
   return (

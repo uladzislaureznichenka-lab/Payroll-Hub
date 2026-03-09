@@ -434,6 +434,8 @@ class InvoiceTemplate(db.Model):
     company_details = db.Column(db.Text, nullable=True)
     payment_instructions = db.Column(db.Text, nullable=True)
     template_pdf_path = db.Column(db.String(500), nullable=True)
+    html_content = db.Column(db.Text, nullable=True)
+    is_active = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -445,6 +447,8 @@ class InvoiceTemplate(db.Model):
             "company_details": self.company_details,
             "payment_instructions": self.payment_instructions,
             "has_template_pdf": bool(self.template_pdf_path),
+            "html_content": self.html_content,
+            "is_active": bool(self.is_active),
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 

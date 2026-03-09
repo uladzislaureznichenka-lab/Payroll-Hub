@@ -140,6 +140,22 @@ export default function Invoices() {
     window.URL.revokeObjectURL(url)
   }
 
+  const previewInvoice = async (inv) => {
+    const r = await api.get(`/invoices/${inv.id}/preview-html`, { responseType: 'text' })
+    const w = window.open('', '_blank')
+    w.document.write(r.data)
+    w.document.close()
+  }
+
+  const generatePdf = async (inv) => {
+    try {
+      await api.post('/invoices/generate', { invoice_id: inv.id })
+      fetchInvoices()
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to generate PDF')
+    }
+  }
+
   const downloadUploadedPdf = async (inv) => {
     const res = await api.get(`/invoices/${inv.id}/download-uploaded`, { responseType: 'blob' })
     const url = window.URL.createObjectURL(new Blob([res.data]))
@@ -272,9 +288,15 @@ export default function Invoices() {
                     <td className="px-4 py-3 tabular-nums text-slate-900">{fmt(inv.amount)}</td>
                     <td className="px-4 py-3 text-slate-600">{inv.currency}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <button onClick={() => previewInvoice(inv)} className="btn-secondary text-xs !px-2 !py-1">
+                          Preview
+                        </button>
                         <button onClick={() => downloadPdf(inv)} className="btn-secondary text-xs !px-2 !py-1">
                           PDF
+                        </button>
+                        <button onClick={() => generatePdf(inv)} className="btn-secondary text-xs !px-2 !py-1">
+                          Generate
                         </button>
                         <button
                           onClick={() => fileRefs.current[inv.id]?.click()}

@@ -13,6 +13,12 @@ from app.models import (
     Invoice, InvoiceTemplate, Employee, LegalEntity,
     PayrollPeriod, PayrollLine,
 )
+from app.services.invoice_pdf import (
+    generate_invoice_pdf,
+    get_html_for_invoice,
+    get_html_for_template_preview,
+    get_default_template_html,
+)
 
 invoices_bp = Blueprint("invoices", __name__)
 
@@ -161,8 +167,8 @@ def generate_from_payroll():
     return jsonify({"created": len(created), "invoices": [i.to_dict() for i in created]}), 201
 
 
-def _build_pdf(inv):
-    """Generate invoice PDF matching the standard template layout (Invoice.pdf)."""
+def _build_pdf_fallback(inv):
+    """Fallback FPDF generation when Playwright is unavailable."""
     emp = Employee.query.get(inv.employee_id)
     le = LegalEntity.query.get(inv.legal_entity_id) if inv.legal_entity_id else None
     template = InvoiceTemplate.query.get(inv.template_id) if inv.template_id else None
@@ -182,13 +188,11 @@ def _build_pdf(inv):
     pdf.add_page()
     pdf.set_auto_page_break(auto=True, margin=15)
 
-    # Header
     header = template.header if template and template.header else "Invoice"
     pdf.set_font("Helvetica", "B", 18)
     pdf.cell(0, 12, header, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(4)
 
-    # Row: INVOICE NUMBER | DATE OF ISSUE | DUE DATE
     pdf.set_font("Helvetica", "B", 9)
     pdf.cell(60, 6, "INVOICE NUMBER", border=0)
     pdf.cell(60, 6, "DATE OF ISSUE", border=0)
@@ -200,7 +204,6 @@ def _build_pdf(inv):
     pdf.cell(60, 6, due_date, border=0)
     pdf.ln(8)
 
-    # Row: BILLED TO | FROM | PURCHASE ORDER
     pdf.set_font("Helvetica", "B", 9)
     pdf.cell(60, 6, "BILLED TO", border=0)
     pdf.cell(60, 6, "FROM", border=0)
@@ -213,7 +216,6 @@ def _build_pdf(inv):
     pdf.cell(60, 6, period_label, border=0)
     pdf.ln(8)
 
-    # Table: Description | Unit cost | QTY | Amount
     col_w = [90, 35, 25, 40]
     pdf.set_font("Helvetica", "B", 9)
     pdf.cell(col_w[0], 7, "Description", border=1)
@@ -240,8 +242,6 @@ def _build_pdf(inv):
         _row(inv.description or "Payroll services", inv.amount)
 
     pdf.ln(4)
-
-    # Summary: SUBTOTAL, TAX, SHIPPING, INVOICE TOTAL
     pdf.set_font("Helvetica", "B", 10)
     pdf.cell(150, 6, "INVOICE TOTAL", border=0)
     pdf.cell(40, 6, f"{inv.currency} {inv.amount:,.2f}", border=0)
@@ -260,10 +260,60 @@ def _build_pdf(inv):
     return buf
 
 
+def _build_pdf(inv):
+    """Generate invoice PDF via HTML template + Playwright, fallback to FPDF."""
+    try:
+        return generate_invoice_pdf(inv)
+    except Exception:
+        return _build_pdf_fallback(inv)
+
+
+@invoices_bp.route("/generate", methods=["POST"])
+@jwt_required()
+def generate_pdf():
+    """Generate PDF for an invoice, save to disk, return download URL."""
+    data = request.get_json() or {}
+    invoice_id = data.get("invoice_id") or data.get("id")
+    if not invoice_id:
+        return jsonify({"error": "invoice_id is required"}), 400
+    inv = Invoice.query.get_or_404(invoice_id)
+    buf = _build_pdf(inv)
+    upload_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "invoices")
+    os.makedirs(upload_dir, exist_ok=True)
+    filename = f"invoice_{inv.invoice_number}.pdf"
+    filepath = os.path.join(upload_dir, filename)
+    with open(filepath, "wb") as f:
+        f.write(buf.read())
+    inv.pdf_path = filepath
+    db.session.commit()
+    return jsonify({
+        "id": inv.id,
+        "invoice_number": inv.invoice_number,
+        "pdf_path": filepath,
+        "download_url": f"/api/invoices/{inv.id}/download-pdf",
+    })
+
+
+@invoices_bp.route("/<int:id>/preview-html", methods=["GET"])
+@jwt_required()
+def preview_html(id):
+    """Return rendered HTML for invoice preview."""
+    inv = Invoice.query.get_or_404(id)
+    html = get_html_for_invoice(inv)
+    return Response(html, mimetype="text/html")
+
+
 @invoices_bp.route("/<int:id>/download-pdf", methods=["GET"])
 @jwt_required()
 def download_pdf(id):
     inv = Invoice.query.get_or_404(id)
+    if inv.pdf_path and os.path.exists(inv.pdf_path):
+        return send_file(
+            inv.pdf_path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=f"invoice_{inv.invoice_number}.pdf",
+        )
     buf = _build_pdf(inv)
     return send_file(
         buf,
@@ -301,6 +351,13 @@ def download_uploaded(id):
     return send_file(inv.uploaded_pdf_path, as_attachment=True)
 
 
+@invoices_bp.route("/templates/default-html", methods=["GET"])
+@jwt_required()
+def get_default_template():
+    """Return the default invoice template HTML for editing."""
+    return jsonify({"html": get_default_template_html()})
+
+
 @invoices_bp.route("/templates", methods=["GET"])
 @jwt_required()
 def list_templates():
@@ -311,13 +368,15 @@ def list_templates():
 @invoices_bp.route("/templates", methods=["POST"])
 @jwt_required()
 def create_template():
-    data = request.get_json()
+    data = request.get_json() or {}
     t = InvoiceTemplate(
-        name=data["name"],
+        name=data.get("name", "New Template"),
         header=data.get("header"),
         company_name=data.get("company_name"),
         company_details=data.get("company_details"),
         payment_instructions=data.get("payment_instructions"),
+        html_content=data.get("html_content"),
+        is_active=False,
     )
     db.session.add(t)
     db.session.commit()
@@ -328,10 +387,43 @@ def create_template():
 @jwt_required()
 def update_template(id):
     t = InvoiceTemplate.query.get_or_404(id)
-    data = request.get_json()
-    for field in ("name", "header", "company_name", "company_details", "payment_instructions"):
+    data = request.get_json() or {}
+    for field in ("name", "header", "company_name", "company_details", "payment_instructions", "html_content"):
         if field in data:
             setattr(t, field, data[field])
+    if "is_active" in data:
+        if data["is_active"]:
+            InvoiceTemplate.query.filter(InvoiceTemplate.id != id).update({"is_active": False})
+        t.is_active = bool(data["is_active"])
+    db.session.commit()
+    return jsonify(t.to_dict())
+
+
+@invoices_bp.route("/templates/<int:id>/preview-html", methods=["GET"])
+@jwt_required()
+def preview_template_html(id):
+    """Preview template HTML with sample invoice data."""
+    html = get_html_for_template_preview(template_id=id)
+    if not html:
+        return jsonify({"error": "No invoices exist for preview"}), 404
+    return Response(html, mimetype="text/html")
+
+
+@invoices_bp.route("/templates/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_template(id):
+    t = InvoiceTemplate.query.get_or_404(id)
+    db.session.delete(t)
+    db.session.commit()
+    return jsonify({"deleted": id})
+
+
+@invoices_bp.route("/templates/<int:id>/set-active", methods=["POST"])
+@jwt_required()
+def set_active_template(id):
+    t = InvoiceTemplate.query.get_or_404(id)
+    InvoiceTemplate.query.filter(InvoiceTemplate.id != id).update({"is_active": False})
+    t.is_active = True
     db.session.commit()
     return jsonify(t.to_dict())
 
