@@ -125,8 +125,8 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          label="Total Payroll This Month"
-          value={fmt(data.total_payroll_this_month)}
+          label="Total payroll this month (USDC)"
+          value={fmt(data.total_payroll_usdc ?? data.total_payroll_this_month)}
           icon="💰"
           accent="text-indigo-600"
           bg="bg-indigo-50"

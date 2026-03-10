@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import toast from 'react-hot-toast'
 import api from '../api'
 
 const MONTHS = [
@@ -48,6 +49,8 @@ export default function Invoices() {
   const [showTemplates, setShowTemplates] = useState(false)
   const [templateForm, setTemplateForm] = useState(null)
   const [savingTemplate, setSavingTemplate] = useState(false)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
 
   const now = new Date()
   const [filters, setFilters] = useState({ search: '', legal_entity: '', period: '', employee_id: '' })
@@ -87,6 +90,7 @@ export default function Invoices() {
     setGenerating(true)
     try {
       await api.post('/invoices/generate-from-payroll', { payroll_period_id: Number(generatePayrollId) })
+      toast.success('Invoices generated')
       setShowGenerate(false)
       fetchInvoices()
     } finally {
@@ -120,6 +124,7 @@ export default function Invoices() {
         description: createForm.description || null,
       }
       await api.post('/invoices', payload)
+      toast.success('Invoice created')
       setShowCreate(false)
       setCreateForm(EMPTY_INVOICE)
       fetchInvoices()
@@ -150,9 +155,49 @@ export default function Invoices() {
   const generatePdf = async (inv) => {
     try {
       await api.post('/invoices/generate', { invoice_id: inv.id })
+      toast.success('PDF generated')
       fetchInvoices()
     } catch (e) {
-      alert(e.response?.data?.error || 'Failed to generate PDF')
+      toast.error(e.response?.data?.error || 'Failed to generate PDF')
+    }
+  }
+
+  const toggleSelect = (id) => {
+    setSelectedIds((s) => {
+      const n = new Set(s)
+      if (n.has(id)) n.delete(id)
+      else n.add(id)
+      return n
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === invoices.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(invoices.map((i) => i.id)))
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return
+    try {
+      const r = await api.post('/invoices/batch-delete', { ids: [...selectedIds] })
+      toast.success(`Deleted ${r.data.deleted} invoice(s)`)
+      setSelectedIds(new Set())
+      setShowDeleteConfirm(null)
+      fetchInvoices()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to delete')
+    }
+  }
+
+  const handleDeleteAll = async () => {
+    try {
+      const r = await api.post('/invoices/delete-all')
+      toast.success(`Deleted ${r.data.deleted} invoice(s)`)
+      setSelectedIds(new Set())
+      setShowDeleteConfirm(null)
+      fetchInvoices()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to delete')
     }
   }
 
@@ -221,11 +266,21 @@ export default function Invoices() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Invoices</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleExportCSV} className="btn-secondary">Export CSV</button>
           <button onClick={() => { setGeneratePayrollId(payrolls[0]?.id || ''); setShowGenerate(true) }} className="btn-secondary">
             Generate from Payroll
           </button>
+          {selectedIds.size > 0 && (
+            <button onClick={() => setShowDeleteConfirm('selected')} className="btn-danger">
+              Delete selected ({selectedIds.size})
+            </button>
+          )}
+          {invoices.length > 0 && (
+            <button onClick={() => setShowDeleteConfirm('all')} className="btn-secondary text-red-600 hover:bg-red-50">
+              Delete all
+            </button>
+          )}
           <button onClick={() => setShowCreate(true)} className="btn-primary">Create Invoice</button>
         </div>
       </div>
@@ -266,6 +321,9 @@ export default function Invoices() {
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
+                  <th className="px-4 py-3 w-10">
+                    <input type="checkbox" checked={invoices.length > 0 && selectedIds.size === invoices.length} onChange={toggleSelectAll} className="rounded" />
+                  </th>
                   {['Invoice #', 'Date', 'Employee', 'Legal Entity', 'Period', 'Amount', 'Currency', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">{h}</th>
                   ))}
@@ -274,6 +332,9 @@ export default function Invoices() {
               <tbody>
                 {invoices.map((inv) => (
                   <tr key={inv.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selectedIds.has(inv.id)} onChange={() => toggleSelect(inv.id)} className="rounded" />
+                    </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-700">{inv.invoice_number}</td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                       {new Date(inv.date).toLocaleDateString()}
@@ -429,6 +490,28 @@ export default function Invoices() {
               <button onClick={() => setShowGenerate(false)} className="btn-secondary">Cancel</button>
               <button onClick={handleGenerate} disabled={generating || !generatePayrollId} className="btn-primary">
                 {generating ? 'Generating…' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Confirm Delete</h2>
+            <p className="text-slate-600 mb-6">
+              {showDeleteConfirm === 'all'
+                ? 'Are you sure you want to delete ALL invoices? This cannot be undone.'
+                : 'Are you sure you want to delete selected invoices?'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowDeleteConfirm(null)} className="btn-secondary">Cancel</button>
+              <button
+                onClick={showDeleteConfirm === 'all' ? handleDeleteAll : handleDeleteSelected}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
               </button>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import api from '../api'
 
 const MONTHS = [
@@ -18,6 +19,7 @@ export default function Payroll() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   const now = new Date()
   const [month, setMonth] = useState(now.getMonth() + 1)
@@ -35,9 +37,21 @@ export default function Payroll() {
     try {
       await api.post('/payroll', { month, year })
       setShowModal(false)
+      toast.success('Payroll period created')
       fetchPayrolls()
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleDelete = async (p) => {
+    try {
+      await api.delete(`/payroll/${p.id}`)
+      toast.success('Payroll period deleted')
+      setDeleteConfirm(null)
+      fetchPayrolls()
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Failed to delete')
     }
   }
 
@@ -60,7 +74,7 @@ export default function Payroll() {
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  {['Period', 'Status', 'Employees', 'Total Payout', 'Total Fiat', 'Total Crypto', 'Created'].map((h) => (
+                  {['Period', 'Status', 'Employees', 'Total Payout', 'Total Fiat', 'Total Crypto', 'Created', ''].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -85,6 +99,14 @@ export default function Payroll() {
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                       {new Date(p.created_at).toLocaleDateString()}
                     </td>
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setDeleteConfirm(p)}
+                        className="text-red-600 hover:text-red-800 text-sm"
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -92,6 +114,21 @@ export default function Payroll() {
           </div>
         )}
       </div>
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Delete Payroll Period</h2>
+            <p className="text-slate-600 mb-6">
+              Are you sure you want to delete {MONTHS[deleteConfirm.month - 1]} {deleteConfirm.year}? This will remove all payroll lines, payments, and related invoices.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

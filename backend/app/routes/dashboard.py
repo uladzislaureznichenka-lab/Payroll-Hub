@@ -7,6 +7,7 @@ from app import db
 from app.models import (
     Employee, PayrollPeriod, PayrollLine, Payment, Department,
 )
+from app.services.currency_conversion import convert_to_usdc, get_all_rates, fetch_rates
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -14,6 +15,11 @@ dashboard_bp = Blueprint("dashboard", __name__)
 @dashboard_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_dashboard():
+    if not get_all_rates():
+        try:
+            fetch_rates()
+        except Exception:
+            pass
     today = date.today()
     current_period = PayrollPeriod.query.filter_by(
         month=today.month, year=today.year
@@ -22,10 +28,17 @@ def get_dashboard():
     total_payout = 0
     total_fiat = 0
     total_crypto = 0
+    total_payroll_usdc = 0.0
     if current_period:
-        total_payout = sum(l.total_payout or 0 for l in current_period.lines)
-        total_fiat = sum(l.fiat_amount or 0 for l in current_period.lines)
-        total_crypto = sum(l.crypto_amount or 0 for l in current_period.lines)
+        for line in current_period.lines:
+            total_payout += line.total_payout or 0
+            total_fiat += line.fiat_amount or 0
+            total_crypto += line.crypto_amount or 0
+            cur = (line.currency or "EUR").upper()
+            fiat_amt = line.fiat_amount or 0
+            crypto_amt = line.crypto_amount or 0
+            total_payroll_usdc += convert_to_usdc(fiat_amt, cur)
+            total_payroll_usdc += convert_to_usdc(crypto_amt, "USDT")
 
     active_count = Employee.query.filter_by(status="Active").count()
     inactive_count = Employee.query.filter_by(status="Inactive").count()
@@ -116,6 +129,7 @@ def get_dashboard():
 
     return jsonify({
         "total_payroll_this_month": total_payout,
+        "total_payroll_usdc": round(total_payroll_usdc, 2),
         "total_crypto_payouts": total_crypto,
         "total_fiat_payouts": total_fiat,
         "active_employees": active_count,

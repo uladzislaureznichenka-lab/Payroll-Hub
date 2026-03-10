@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 
 from app import db
-from app.models import Department, LegalEntity, CustomField, Currency, CryptoNetwork
+from app.models import Department, LegalEntity, CustomField, Currency, CryptoNetwork, CurrencyConversionConfig, ExchangeRate
+from app.services.currency_conversion import fetch_rates, get_all_rates, test_connection, convert_to_usdc
 
 settings_bp = Blueprint("settings", __name__)
 
@@ -246,3 +247,112 @@ def delete_custom_field(id):
     db.session.delete(cf)
     db.session.commit()
     return jsonify({"message": "Custom field deleted"})
+
+
+# --- Currency Conversion ---
+
+@settings_bp.route("/currency-conversion", methods=["GET"])
+@jwt_required()
+def get_currency_conversion():
+    config = CurrencyConversionConfig.query.first()
+    rates = get_all_rates()
+    return jsonify({
+        "provider": (config and config.provider) or "coingecko",
+        "api_key_set": bool(config and config.api_key),
+        "rates": rates,
+        "updated_at": (config and config.updated_at and config.updated_at.isoformat()) or None,
+    })
+
+
+@settings_bp.route("/currency-conversion", methods=["PUT"])
+@jwt_required()
+def update_currency_conversion():
+    data = request.get_json() or {}
+    config = CurrencyConversionConfig.query.first()
+    if not config:
+        config = CurrencyConversionConfig()
+        db.session.add(config)
+    if "provider" in data:
+        config.provider = data["provider"]
+    if "api_key" in data:
+        config.api_key = data["api_key"] or None
+    db.session.commit()
+    return jsonify({"provider": config.provider, "api_key_set": bool(config.api_key)})
+
+
+@settings_bp.route("/currency-conversion/test", methods=["POST"])
+@jwt_required()
+def test_currency_conversion():
+    data = request.get_json() or {}
+    ok, msg = test_connection(data.get("provider", "coingecko"), data.get("api_key"))
+    return jsonify({"success": ok, "message": msg})
+
+
+@settings_bp.route("/currency-conversion/refresh", methods=["POST"])
+@jwt_required()
+def refresh_currency_rates():
+    rates = fetch_rates()
+    return jsonify({"rates": get_all_rates(), "count": len(rates)})
+
+
+@settings_bp.route("/seed-test-data", methods=["POST"])
+@jwt_required()
+def seed_test_data():
+    """Generate 6 months of payroll history with bonuses, penalties, overtime, reimbursements."""
+    from app.models import PayrollPeriod, PayrollLine, Employee, Payment
+    from datetime import date, timedelta
+    from random import randint, uniform
+
+    today = date.today()
+    created = []
+    for i in range(6):
+        d = today.replace(day=1) - timedelta(days=28 * (i + 1))
+        m, y = d.month, d.year
+        if PayrollPeriod.query.filter_by(month=m, year=y).first():
+            continue
+        period = PayrollPeriod(month=m, year=y, status="Finalized")
+        db.session.add(period)
+        db.session.flush()
+        employees = Employee.query.filter_by(status="Active").all()
+        for emp in employees:
+            base = emp.effective_salary or 3000
+            bonus = round(uniform(0, 500), 2) if randint(0, 2) == 0 else 0
+            penalties = round(uniform(0, 100), 2) if randint(0, 4) == 0 else 0
+            overtime = round(uniform(0, 20), 1) if randint(0, 2) == 0 else 0
+            overtime_rate = emp.overtime_rate or 25
+            overtime_payout = round(overtime * overtime_rate, 2)
+            reimb = round(uniform(0, 200), 2) if randint(0, 3) == 0 else 0
+            total = round(base + bonus - penalties + overtime_payout + reimb, 2)
+            fiat = total if emp.payment_method == "Fiat" else (emp.fiat_salary_amount or 0 if emp.payment_method == "Split" else 0)
+            crypto = total - fiat if emp.payment_method in ("Crypto", "Split") else 0
+            line = PayrollLine(
+                payroll_period_id=period.id,
+                employee_id=emp.id,
+                base_salary=base,
+                bonus=bonus,
+                penalties=penalties,
+                overtime_hours=overtime,
+                overtime_rate=overtime_rate,
+                overtime_payout=overtime_payout,
+                reimbursements=reimb,
+                prorated_salary=base,
+                total_payout=total,
+                fiat_amount=fiat,
+                crypto_amount=crypto,
+                currency=emp.currency or "EUR",
+            )
+            db.session.add(line)
+            db.session.flush()
+            pay = Payment(
+                employee_id=emp.id,
+                payroll_line_id=line.id,
+                amount=total,
+                currency=emp.currency or "EUR",
+                payment_type="Fiat" if fiat else "Crypto",
+                status="Paid",
+                payment_date=date(y, m, 28),
+            )
+            db.session.add(pay)
+        created.append(f"{y}-{m:02d}")
+    db.session.commit()
+    return jsonify({"created": created, "message": f"Generated payroll for {len(created)} months"})

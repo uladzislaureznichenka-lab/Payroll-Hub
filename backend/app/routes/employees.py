@@ -247,6 +247,54 @@ def delete_employee(id):
     return jsonify({"message": "Employee deactivated"})
 
 
+CSV_TEMPLATE_COLUMNS = [
+    "employee_id", "first_name", "last_name", "job_title", "department", "country",
+    "employment_type", "legal_entity", "base_salary", "salary_type", "currency",
+    "payment_method", "bank_name", "iban", "account_holder", "wallet_address",
+    "wallet_network", "wallet_coin", "manager", "telegram", "slack", "email",
+]
+
+
+@employees_bp.route("/csv-template", methods=["GET"])
+@jwt_required()
+def download_csv_template():
+    user = _current_user()
+    if not _is_admin(user):
+        return jsonify({"error": "Admin access required"}), 403
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=CSV_TEMPLATE_COLUMNS)
+    writer.writeheader()
+    writer.writerow({
+        "employee_id": "EMP001",
+        "first_name": "John",
+        "last_name": "Doe",
+        "job_title": "Developer",
+        "department": "Engineering",
+        "country": "Germany",
+        "employment_type": "Contractor",
+        "legal_entity": "Company Name",
+        "base_salary": "5000",
+        "salary_type": "Monthly",
+        "currency": "EUR",
+        "payment_method": "Fiat",
+        "bank_name": "Bank",
+        "iban": "DE89370400440532013000",
+        "account_holder": "John Doe",
+        "wallet_address": "",
+        "wallet_network": "TRON",
+        "wallet_coin": "USDT",
+        "manager": "Jane Smith",
+        "telegram": "@johndoe",
+        "slack": "johndoe",
+        "email": "john@example.com",
+    })
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=employees_import_template.csv"},
+    )
+
+
 @employees_bp.route("/import-csv", methods=["POST"])
 @jwt_required()
 def import_csv():
@@ -277,6 +325,7 @@ def import_csv():
             employee_id=eid,
             first_name=row.get("first_name", "").strip(),
             last_name=row.get("last_name", "").strip(),
+            job_title=row.get("job_title", "").strip() or None,
             email=row.get("email", "").strip() or None,
             country=row.get("country", "").strip() or None,
             employment_type=row.get("employment_type", "").strip() or None,

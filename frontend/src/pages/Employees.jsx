@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import api from '../api'
 
 const EMPLOYMENT_TYPES = ['Contractor', 'Contractor via agency', 'Employee via agency']
@@ -89,8 +90,27 @@ export default function Employees() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleExportCSV} className="btn-secondary">Export CSV</button>
+          <button
+            onClick={async () => {
+              try {
+                const r = await api.get('/employees/csv-template', { responseType: 'blob' })
+                const url = window.URL.createObjectURL(new Blob([r.data]))
+                const a = document.createElement('a')
+                a.href = url
+                a.download = 'employees_import_template.csv'
+                a.click()
+                window.URL.revokeObjectURL(url)
+                toast.success('Template downloaded')
+              } catch (e) {
+                toast.error('Failed to download')
+              }
+            }}
+            className="btn-secondary"
+          >
+            Download CSV Template
+          </button>
           <button onClick={() => fileRef.current?.click()} className="btn-secondary" disabled={importing}>
             {importing ? 'Importing…' : 'Import CSV'}
           </button>
@@ -99,7 +119,10 @@ export default function Employees() {
         </div>
       </div>
 
-      <div className="card p-4">
+      <div className="card p-4 space-y-4">
+        <p className="text-sm text-slate-600">
+          CSV format: employee_id, first_name, last_name, job_title, department, country, employment_type, legal_entity, base_salary, salary_type, currency, payment_method, bank_name, iban, account_holder, wallet_address, wallet_network, wallet_coin, manager, telegram, slack, email. Use the template for the correct structure.
+        </p>
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"

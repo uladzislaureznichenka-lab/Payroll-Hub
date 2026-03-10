@@ -54,6 +54,23 @@ class Currency(db.Model):
         return {"id": self.id, "code": self.code, "name": self.name or self.code}
 
 
+class CurrencyConversionConfig(db.Model):
+    __tablename__ = "currency_conversion_config"
+    id = db.Column(db.Integer, primary_key=True)
+    provider = db.Column(db.String(50), default="coingecko")
+    api_key = db.Column(db.String(500), nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ExchangeRate(db.Model):
+    __tablename__ = "exchange_rates"
+    id = db.Column(db.Integer, primary_key=True)
+    from_currency = db.Column(db.String(10), nullable=False)
+    to_currency = db.Column(db.String(10), default="USDC")
+    rate = db.Column(db.Float, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class CryptoNetwork(db.Model):
     __tablename__ = "crypto_networks"
     id = db.Column(db.Integer, primary_key=True)

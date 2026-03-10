@@ -1,3 +1,4 @@
+import { Toaster } from 'react-hot-toast'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Layout from './components/Layout'
@@ -66,6 +67,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       </AuthProvider>
     </BrowserRouter>
   )

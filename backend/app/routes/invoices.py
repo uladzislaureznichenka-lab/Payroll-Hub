@@ -69,6 +69,53 @@ def list_invoices():
     return jsonify([inv.to_dict() for inv in invoices])
 
 
+@invoices_bp.route("/batch-delete", methods=["POST"])
+@jwt_required()
+def batch_delete_invoices():
+    data = request.get_json() or {}
+    ids = data.get("ids", [])
+    if not ids:
+        return jsonify({"error": "ids required"}), 400
+    deleted = 0
+    for iid in ids:
+        inv = Invoice.query.get(iid)
+        if inv:
+            if inv.pdf_path and os.path.exists(inv.pdf_path):
+                try:
+                    os.remove(inv.pdf_path)
+                except OSError:
+                    pass
+            if inv.uploaded_pdf_path and os.path.exists(inv.uploaded_pdf_path):
+                try:
+                    os.remove(inv.uploaded_pdf_path)
+                except OSError:
+                    pass
+            db.session.delete(inv)
+            deleted += 1
+    db.session.commit()
+    return jsonify({"deleted": deleted})
+
+
+@invoices_bp.route("/delete-all", methods=["POST"])
+@jwt_required()
+def delete_all_invoices():
+    invoices = Invoice.query.all()
+    for inv in invoices:
+        if inv.pdf_path and os.path.exists(inv.pdf_path):
+            try:
+                os.remove(inv.pdf_path)
+            except OSError:
+                pass
+        if inv.uploaded_pdf_path and os.path.exists(inv.uploaded_pdf_path):
+            try:
+                os.remove(inv.uploaded_pdf_path)
+            except OSError:
+                pass
+    deleted = Invoice.query.delete()
+    db.session.commit()
+    return jsonify({"deleted": deleted})
+
+
 @invoices_bp.route("/<int:id>", methods=["GET"])
 @jwt_required()
 def get_invoice(id):

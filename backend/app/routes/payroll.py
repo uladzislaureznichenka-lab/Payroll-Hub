@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required
 
 from app import db
-from app.models import PayrollPeriod, PayrollLine, Employee, Payment, Request
+from app.models import PayrollPeriod, PayrollLine, Employee, Payment, Request, Invoice
 
 payroll_bp = Blueprint("payroll", __name__)
 
@@ -272,6 +272,34 @@ def create_payroll_period():
     _apply_approved_requests(period)
     db.session.commit()
     return jsonify(period.to_dict()), 201
+
+
+@payroll_bp.route("/<int:id>", methods=["DELETE"])
+@jwt_required()
+def delete_payroll_period(id):
+    period = PayrollPeriod.query.get_or_404(id)
+    import os
+    from flask import current_app
+    for line in period.lines:
+        for p in Payment.query.filter_by(payroll_line_id=line.id).all():
+            db.session.delete(p)
+    for inv in Invoice.query.filter_by(period_month=period.month, period_year=period.year).all():
+        if inv.pdf_path and os.path.exists(inv.pdf_path):
+            try:
+                os.remove(inv.pdf_path)
+            except OSError:
+                pass
+        if inv.uploaded_pdf_path and os.path.exists(inv.uploaded_pdf_path):
+            try:
+                os.remove(inv.uploaded_pdf_path)
+            except OSError:
+                pass
+        db.session.delete(inv)
+    for line in period.lines:
+        db.session.delete(line)
+    db.session.delete(period)
+    db.session.commit()
+    return jsonify({"deleted": id})
 
 
 @payroll_bp.route("/<int:id>", methods=["GET"])

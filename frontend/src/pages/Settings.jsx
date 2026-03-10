@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
+import toast from 'react-hot-toast'
 import api from '../api'
 
-const TABS = ['General', 'Departments', 'Legal Entities', 'Users', 'Custom Fields', 'Invoice Templates']
+const TABS = ['General', 'Departments', 'Legal Entities', 'Users', 'Custom Fields', 'Invoice Templates', 'Currency Conversion']
 
 function Spinner() {
   return (
@@ -843,6 +844,135 @@ function InvoiceTemplatesTab() {
   )
 }
 
+function CurrencyConversionTab() {
+  const [config, setConfig] = useState({ provider: 'coingecko', api_key_set: false, rates: {}, updated_at: null })
+  const [apiKey, setApiKey] = useState('')
+  const [provider, setProvider] = useState('coingecko')
+  const [testing, setTesting] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const fetchConfig = useCallback(() => {
+    api.get('/settings/currency-conversion').then((r) => {
+      setConfig(r.data)
+      setProvider(r.data.provider || 'coingecko')
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => { fetchConfig() }, [fetchConfig])
+
+  const testConnection = async () => {
+    setTesting(true)
+    try {
+      const r = await api.post('/settings/currency-conversion/test', { provider, api_key: apiKey || undefined })
+      if (r.data.success) {
+        toast.success(r.data.message)
+      } else {
+        toast.error(r.data.message)
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || 'Connection failed')
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const saveConfig = async () => {
+    try {
+      await api.put('/settings/currency-conversion', { provider, api_key: apiKey || null })
+      toast.success('Settings saved')
+      fetchConfig()
+    } catch (e) {
+      toast.error('Failed to save')
+    }
+  }
+
+  const refreshRates = async () => {
+    setRefreshing(true)
+    try {
+      const r = await api.post('/settings/currency-conversion/refresh')
+      toast.success(`Refreshed ${r.data.count} rates`)
+      fetchConfig()
+    } catch (e) {
+      toast.error('Failed to refresh rates')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Currency Conversion">
+        <p className="text-sm text-slate-500 mb-4">
+          Configure API for converting fiat (EUR, PLN, BYN, RUB) to USDC. Used for Dashboard analytics.
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Provider</label>
+            <select value={provider} onChange={(e) => setProvider(e.target.value)} className="select-field">
+              <option value="coingecko">CoinGecko (free, no key)</option>
+              <option value="exchangerate">ExchangeRate API</option>
+              <option value="openexchangerates">OpenExchangeRates</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">API Key (optional for CoinGecko)</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={config.api_key_set ? '••••••••' : 'Enter API key'}
+              className="input-field"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={testConnection} disabled={testing} className="btn-secondary">
+              {testing ? 'Testing…' : 'Test Connection'}
+            </button>
+            <button onClick={saveConfig} className="btn-primary">Save</button>
+            <button onClick={refreshRates} disabled={refreshing} className="btn-secondary">
+              {refreshing ? 'Refreshing…' : 'Refresh rates'}
+            </button>
+          </div>
+        </div>
+      </SectionCard>
+      <SectionCard title="Current Rates (to USDC)">
+        <p className="text-xs text-slate-500 mb-2">
+          {config.updated_at ? `Last updated: ${new Date(config.updated_at).toLocaleString()}` : 'No rates yet. Click Refresh rates.'}
+        </p>
+        {Object.keys(config.rates || {}).length === 0 ? (
+          <p className="text-sm text-slate-500">No rates cached.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {Object.entries(config.rates || {}).map(([cur, data]) => (
+              <div key={cur} className="p-2 rounded bg-slate-50 text-sm">
+                <span className="font-medium">{cur}</span>: {Number(typeof data === 'object' ? data?.rate : data || 0).toFixed(4)}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+      <SectionCard title="Generate Test Data">
+        <p className="text-sm text-slate-500 mb-4">
+          Create 6 months of payroll history with bonuses, penalties, overtime, and reimbursements for testing analytics.
+        </p>
+        <button
+          onClick={async () => {
+            try {
+              const r = await api.post('/settings/seed-test-data')
+              toast.success(r.data.message || 'Test data generated')
+            } catch (e) {
+              toast.error(e.response?.data?.error || 'Failed')
+            }
+          }}
+          className="btn-primary"
+        >
+          Generate 6 Months Payroll
+        </button>
+      </SectionCard>
+    </div>
+  )
+}
+
 export default function Settings() {
   const [tab, setTab] = useState('General')
 
@@ -853,6 +983,7 @@ export default function Settings() {
     Users: <UsersTab />,
     'Custom Fields': <CustomFieldsTab />,
     'Invoice Templates': <InvoiceTemplatesTab />,
+    'Currency Conversion': <CurrencyConversionTab />,
   }
 
   return (
